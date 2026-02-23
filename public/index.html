@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Image Scraper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: linear-gradient(145deg, #0f0f12 0%, #1a1a22 50%, #0d0d10 100%);
+      color: #e4e4e7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+    }
+    h1 {
+      margin: 0 0 0.5rem;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      margin: 0 0 1.75rem;
+      font-size: 0.9rem;
+      color: #71717a;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #a1a1aa;
+      margin-bottom: 0.5rem;
+    }
+    input[type="url"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+      color: #e4e4e7;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      margin-bottom: 1.25rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="url"]::placeholder {
+      color: #52525b;
+    }
+    input[type="url"]:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+    button {
+      width: 100%;
+      padding: 0.85rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: #fff;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+    }
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    .message {
+      margin-top: 1.25rem;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      border-radius: 8px;
+      display: none;
+    }
+    .message.visible {
+      display: block;
+    }
+    .message.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .message.success {
+      background: rgba(34, 197, 94, 0.15);
+      color: #86efac;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .message.info {
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Product Image Scraper</h1>
+    <p class="subtitle">Enter a product or category page URL to scrape images and download as ZIP.</p>
+    <form id="form">
+      <label for="url">Page URL</label>
+      <input
+        type="url"
+        id="url"
+        name="url"
+        placeholder="https://www.example.com/shop/category/..."
+        required
+        autocomplete="url"
+      />
+      <button type="submit" id="submitBtn">Scrape &amp; Download ZIP</button>
+    </form>
+    <div id="message" class="message" role="alert"></div>
+  </div>
+  <script>
+    const form = document.getElementById("form");
+    const urlInput = document.getElementById("url");
+    const submitBtn = document.getElementById("submitBtn");
+    const messageEl = document.getElementById("message");
+
+    function showMessage(text, type) {
+      messageEl.textContent = text;
+      messageEl.className = "message visible " + type;
+    }
+
+    function hideMessage() {
+      messageEl.className = "message";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      hideMessage();
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Scraping Please Wait…";
+
+      try {
+        const res = await fetch("/api/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Request failed");
+        }
+
+        const blob = await res.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = "product-images.zip";
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+
+        showMessage("Download started. Check your downloads folder.", "success");
+      } catch (err) {
+        showMessage(err.message || "Something went wrong.", "error");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Scrape & Download ZIP";
+      }
+    });
+  </script>
+</body>
+</html>
