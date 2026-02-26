@@ -20,9 +20,20 @@ function randomUniqueCode(length = 10) {
   return code;
 }
 
+const ALLOWED_ORIGINS = [
+  "https://infinite-utilities.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
 app.use(express.json());
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(200);
