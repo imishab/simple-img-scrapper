@@ -18,8 +18,11 @@
     "archiver": "^7.0.1",
     "axios": "^1.13.5",
     "cheerio": "^1.2.0",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "fs": "^0.0.1-security",
-    "path": "^0.12.7"
+    "mongodb": "^7.1.0",
+    "path": "^0.12.7",
+    "pdf-lib": "^1.17.1"
   }
 }
