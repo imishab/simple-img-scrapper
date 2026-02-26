@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cash Payment Voucher Maker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    @page {
+      size: 210mm 297mm;
+      margin: 0;
+    }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, sans-serif;
+      background: #e5e7eb;
+      padding: 1rem;
+      color: #111;
+    }
+    .toolbar {
+      max-width: 210mm;
+      margin: 0 auto 1rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .toolbar button {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #1e40af;
+      color: #fff;
+    }
+    .toolbar button:hover { background: #1e3a8a; }
+    .toolbar button.secondary { background: #374151; }
+    .toolbar button.secondary:hover { background: #1f2937; }
+    .pages {
+      max-width: 210mm;
+      margin: 0 auto;
+    }
+    .a4-page {
+      width: 210mm;
+      min-height: 297mm;
+      height: 297mm;
+      background: #fff;
+      margin-bottom: 1rem;
+      padding: 10mm 12mm;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    @media print {
+      html, body {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0;
+        padding: 0;
+        background: #fff;
+      }
+      .toolbar { display: none !important; }
+      .pages { max-width: none; }
+      .a4-page {
+        width: 210mm;
+        height: 297mm;
+        min-height: 297mm;
+        max-height: 297mm;
+        margin: 0;
+        padding: 10mm 12mm;
+        box-shadow: none;
+        page-break-after: always;
+        overflow: hidden;
+      }
+      .a4-page:last-child { page-break-after: auto; }
+    }
+    .voucher {
+      /* border-bottom: 1px solid #d1d5db; */
+      /* padding: 6mm 8mm; */
+      margin-bottom: 8mm;
+      min-height: 0;
+    }
+    .voucher:last-child { margin-bottom: 0; }
+    .voucher-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4mm;
+    }
+    .voucher-company {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .voucher-logo {
+      height: 10mm;
+      width: auto;
+      max-width: 45mm;
+      object-fit: contain;
+      display: block;
+    }
+    .voucher-company-name { font-size: 11px; font-weight: 600; color: #111; }
+    .voucher-title-block { text-align: right; }
+    .voucher-title { font-size: 20px; font-weight: normal !important; margin: 0 0 2px 0; }
+    .voucher-number { font-size: 12px; color: #6b7280; margin: 0 0 2px 0; }
+    .voucher-date { font-size: 10px; color: #374151; }
+    .voucher-payee {
+      margin-bottom: 4mm;
+      font-size: 10px;
+    }
+    .voucher-payee label { color: #6b7280; }
+    .voucher-payee .line { border-bottom: 1px solid #9ca3af; min-height: 6mm; }
+    .voucher-table { border-collapse: collapse; }
+    .voucher-total {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8mm;
+      margin-bottom: 2mm;
+      font-size: 10px;
+    }
+    .voucher-total .total-line { border-bottom: 1px solid #9ca3af; min-width: 18mm; }
+    .voucher-sar-line { font-size: 10px; margin-bottom: 4mm; }
+    .voucher-sar-line .line { border-bottom: 1px solid #9ca3af; display: inline-block; min-width: 179mm; margin-left: 3px; }
+    .voucher-footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: #6b7280;
+    }
+    .voucher-footer .line { border-bottom: 1px solid #9ca3af; display: inline-block; min-width: 35mm; margin-left: 4px; }
+
+    .voucher-divider { 
+      width: 100%;
+      margin-bottom: 4mm; 
+      margin-top: 4mm; 
+    }
+    .date-line { display:inline-block; min-width:7mm; border-bottom:0px solid #000; margin:0 2mm; }
+    /* Voucher table: fit A4 content width (186mm) */
+    .voucher-table-wrap { width: 100%; max-width: 186mm; }
+    .voucher-table-wrap .col-particulars { flex: 1; min-width: 0; }
+    .voucher-table-wrap .col-sar,
+    .voucher-table-wrap .col-halala { width: 32mm; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" id="addPage">Add another page</button>
+    <button type="button" class="secondary" id="printBtn">Print</button>
+  </div>
+  <div class="pages" id="pages"></div>
+
+  <script>
+    const VOUCHERS_PER_PAGE = 3;
+    const PREFIX = "VC-INF-";
+    let nextVoucherIndex = 1;
+
+    function pad(num) {
+      return String(num).padStart(4, "0");
+    }
+
+    function getNextVoucherNumber() {
+      const n = nextVoucherIndex++;
+      return PREFIX + pad(n);
+    }
+
+    function createVoucher(number) {
+      return `
+        <div class="voucher">
+          <div class="voucher-header">
+            <div class="voucher-company">
+              <img src="/images/logo2.png" alt="Infinite Trading Company" class="voucher-logo" />
+            </div>
+            <div class="voucher-title-block">
+              <p class="voucher-title">Cash Payment Voucher</p>
+              <p class="voucher-number">${number}</p>
+              <p class="voucher-date">Date: <span class="date-line"></span> / <span class="date-line"></span> / <span class="date-line"></span></p>
+            </div>
+          </div>
+          <hr style="border: none; border-top: 1px solid #B6B6B6; margin-bottom: 4mm; margin-top: -4mm;">
+          <div class="flex items-center gap-2 mb-4">
+    <span class="text-xs text-gray-700 whitespace-nowrap">Name of payee:</span>
+    <div class="flex-1 border-b mt-2 border-gray-400"></div>
+  </div>
+
+  <!-- Table -->
+  <div class="voucher-table-wrap border border-gray-300 rounded overflow-hidden">
+    <div class="flex">
+      <div class="col-particulars border-r border-gray-300 text-center py-2 text-xs text-gray-700">Particulars</div>
+      <div class="col-sar col-halala flex border-b border-gray-300">
+        <div class="col-sar text-center py-1 text-xs text-gray-700 border-r border-gray-300">Amount (SAR)</div>
+        <div class="col-halala text-center py-1 text-xs text-gray-700">Halala</div>
+      </div>
+    </div>
+    <div class="flex border-t border-gray-300">
+      <div class="col-particulars border-r border-gray-300 min-h-[2.5rem]"></div>
+      <div class="col-sar border-r border-gray-300 min-h-[2.5rem]"></div>
+      <div class="col-halala min-h-[2.5rem]"></div>
+    </div>
+    <div class="flex border-t border-gray-300">
+      <div class="col-particulars border-r border-gray-300 text-right pr-2 py-2 text-xs text-gray-700">Total</div>
+      <div class="col-sar border-r border-gray-300 py-2"></div>
+      <div class="col-halala py-2"></div>
+    </div>
+  </div>
+
+  <!-- SAR line -->
+  <div class="flex items-center gap-2 mt-4">
+    <span class="text-xs text-gray-700 whitespace-nowrap">SAR</span>
+    <div class="flex-1 mt-2 border-b border-gray-400"></div>
+  </div>
+          <div class="voucher-footer mt-4">
+            <span class="text-xs">Prepared by </span>
+            <span class="text-xs">Received by </span>
+          </div>
+        </div>
+        <hr class="voucher-divider">
+      `;
+    }
+
+    function addPage() {
+      const page = document.createElement("div");
+      page.className = "a4-page";
+      let html = "";
+      for (let i = 0; i < VOUCHERS_PER_PAGE; i++) {
+        html += createVoucher(getNextVoucherNumber());
+      }
+      page.innerHTML = html;
+      document.getElementById("pages").appendChild(page);
+    }
+
+    document.getElementById("addPage").addEventListener("click", addPage);
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+    // Start with one A4 page (3 vouchers)
+    addPage();
+  </script>
+</body>
+</html>

@@ -9,6 +9,11 @@ const PORT =  3007;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/images", express.static(path.join(__dirname, "images")));
+
+app.get("/vouchers", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "vouchers.html"));
+});
 
 app.post("/api/scrape", async (req, res) => {
   const { url } = req.body;
