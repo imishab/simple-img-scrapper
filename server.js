@@ -6,7 +6,7 @@ const { PDFDocument, StandardFonts } = require("pdf-lib");
 const archiver = require("archiver");
 const { scrapePage, downloadImages } = require("./app");
 const { connect } = require("./db");
-const { getPreviewVoucherNumbers, commitVoucherNumbers } = require("./voucherSequence");
+const { getPreviewVoucherNumbers, commitVoucherNumbers, getCounterNextNumber, setCounterNextNumber } = require("./voucherSequence");
 
 const app = express();
 const PORT = process.env.PORT || 3007;
@@ -34,7 +34,7 @@ app.use((req, res, next) => {
   } else {
     res.setHeader("Access-Control-Allow-Origin", "*");
   }
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
@@ -104,6 +104,30 @@ app.post("/api/voucher/commit", async (req, res) => {
   } catch (err) {
     console.error("Voucher commit error:", err);
     res.status(500).json({ error: "Failed to save voucher numbers" });
+  }
+});
+
+app.get("/api/voucher/counter", async (req, res) => {
+  try {
+    const nextNumber = await getCounterNextNumber();
+    res.json({ nextNumber });
+  } catch (err) {
+    console.error("Voucher counter get error:", err);
+    res.status(500).json({ error: "Failed to get counter" });
+  }
+});
+
+app.put("/api/voucher/counter", async (req, res) => {
+  try {
+    const nextNumber = parseInt(req.body?.nextNumber, 10);
+    if (Number.isNaN(nextNumber)) {
+      return res.status(400).json({ error: "nextNumber is required and must be a number" });
+    }
+    const updated = await setCounterNextNumber(nextNumber);
+    res.json({ nextNumber: updated });
+  } catch (err) {
+    console.error("Voucher counter set error:", err);
+    res.status(400).json({ error: err.message || "Failed to update counter" });
   }
 });
 

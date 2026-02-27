@@ -53,4 +53,38 @@ async function commitVoucherNumbers(count = 1) {
   return numbers;
 }
 
-module.exports = { getPreviewVoucherNumbers, commitVoucherNumbers };
+/**
+ * Get the next voucher number that would be issued (without incrementing).
+ */
+async function getCounterNextNumber() {
+  const db = getDb();
+  const col = db.collection("counters");
+  const doc = await col.findOne({ _id: COUNTER_ID });
+  const current = doc?.value ?? START_VALUE - 1;
+  return current + 1;
+}
+
+/**
+ * Set the next voucher number. After this, the next issued will be nextNumber (e.g. 1000 → CV-INV-1000).
+ */
+async function setCounterNextNumber(nextNumber) {
+  const num = parseInt(nextNumber, 10);
+  if (Number.isNaN(num) || num < START_VALUE) {
+    throw new Error(`Next number must be at least ${START_VALUE}`);
+  }
+  const db = getDb();
+  const col = db.collection("counters");
+  await col.updateOne(
+    { _id: COUNTER_ID },
+    { $set: { value: num - 1 } },
+    { upsert: true }
+  );
+  return num;
+}
+
+module.exports = {
+  getPreviewVoucherNumbers,
+  commitVoucherNumbers,
+  getCounterNextNumber,
+  setCounterNextNumber,
+};
