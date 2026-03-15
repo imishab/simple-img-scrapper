@@ -7,6 +7,16 @@ const archiver = require("archiver");
 const { scrapePage, downloadImages } = require("./app");
 const { connect } = require("./db");
 const { getPreviewVoucherNumbers, commitVoucherNumbers, getCounterNextNumber, setCounterNextNumber } = require("./voucherSequence");
+const {
+  ensureAuthIndexes,
+  createUser,
+  findUserByEmail,
+  createSession,
+  deleteSession,
+  findUserFromToken,
+  verifyPassword,
+  sanitizeUser,
+} = require("./auth");
 
 const app = express();
 const PORT = process.env.PORT || 3007;
@@ -35,7 +45,7 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
@@ -83,6 +93,101 @@ app.get("/pdf/voucher.pdf", async (req, res) => {
 
 app.get("/vouchers", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "vouchers.html"));
+});
+
+function getBearerToken(req) {
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Bearer ")) return null;
+  return header.slice(7).trim();
+}
+
+async function requireAuth(req, res, next) {
+  if (req.method === "OPTIONS") return next();
+
+  const token = getBearerToken(req);
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+  const user = await findUserFromToken(token);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  req.authToken = token;
+  req.user = user;
+  return next();
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+app.post("/api/auth/signup", async (req, res) => {
+  try {
+    const name = (req.body?.name || "").trim();
+    const email = (req.body?.email || "").trim().toLowerCase();
+    const password = req.body?.password || "";
+
+    if (!name) return res.status(400).json({ error: "Name is required" });
+    if (!email || !isValidEmail(email)) return res.status(400).json({ error: "Valid email is required" });
+    if (typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    const existing = await findUserByEmail(email);
+    if (existing) return res.status(409).json({ error: "Email already in use" });
+
+    const user = await createUser({ name, email, password });
+    const session = await createSession(user._id);
+    return res.status(201).json({
+      token: session.token,
+      user: sanitizeUser(user),
+    });
+  } catch (err) {
+    console.error("Auth signup error:", err);
+    return res.status(500).json({ error: "Failed to sign up" });
+  }
+});
+
+app.post("/api/auth/signin", async (req, res) => {
+  try {
+    const email = (req.body?.email || "").trim().toLowerCase();
+    const password = req.body?.password || "";
+
+    if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+
+    const user = await findUserByEmail(email);
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const session = await createSession(user._id);
+    return res.json({
+      token: session.token,
+      user: sanitizeUser(user),
+    });
+  } catch (err) {
+    console.error("Auth signin error:", err);
+    return res.status(500).json({ error: "Failed to sign in" });
+  }
+});
+
+app.use("/api", async (req, res, next) => {
+  if (req.path === "/auth/signup" || req.path === "/auth/signin") {
+    return next();
+  }
+  return requireAuth(req, res, next);
+});
+
+app.get("/api/auth/me", (req, res) => {
+  return res.json({ user: sanitizeUser(req.user) });
+});
+
+app.post("/api/auth/signout", async (req, res) => {
+  try {
+    await deleteSession(req.authToken);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Auth signout error:", err);
+    return res.status(500).json({ error: "Failed to sign out" });
+  }
 });
 
 app.get("/api/voucher/next/preview", async (req, res) => {
@@ -195,6 +300,9 @@ app.post("/api/scrape", async (req, res) => {
 });
 
 connect()
+  .then(() => {
+    return ensureAuthIndexes();
+  })
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);
