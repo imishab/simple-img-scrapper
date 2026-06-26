@@ -17,6 +17,11 @@ const {
   verifyPassword,
   sanitizeUser,
 } = require("./auth");
+const {
+  ensureCareersIndexes,
+  listCategories, createCategory, updateCategory, deleteCategory,
+  listJobs, getJobBySlug, createJob, updateJob, deleteJob,
+} = require("./careers");
 
 const app = express();
 const PORT = process.env.PORT || 3007;
@@ -32,8 +37,11 @@ function randomUniqueCode(length = 10) {
 
 const ALLOWED_ORIGINS = [
   "https://infinite-utilities.vercel.app",
+  "https://pacificgroups.in",
   "http://localhost:3000",
+  "http://localhost:5173",
   "http://127.0.0.1:3000",
+  "http://127.0.0.1:5173",
 ];
 
 app.use(express.json());
@@ -44,7 +52,7 @@ app.use((req, res, next) => {
   } else {
     res.setHeader("Access-Control-Allow-Origin", "*");
   }
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
@@ -118,6 +126,42 @@ async function requireAuth(req, res, next) {
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
+
+// ── Public careers endpoints (no auth required) ──────────────────────────────
+
+app.get("/api/careers/categories", async (req, res) => {
+  try {
+    const categories = await listCategories();
+    res.json({ categories });
+  } catch (err) {
+    console.error("List categories error:", err);
+    res.status(500).json({ error: "Failed to fetch categories" });
+  }
+});
+
+app.get("/api/careers/jobs", async (req, res) => {
+  try {
+    const { categoryId, status } = req.query;
+    const jobs = await listJobs({ categoryId, status });
+    res.json({ jobs });
+  } catch (err) {
+    console.error("List jobs error:", err);
+    res.status(500).json({ error: "Failed to fetch jobs" });
+  }
+});
+
+app.get("/api/careers/jobs/:slug", async (req, res) => {
+  try {
+    const job = await getJobBySlug(req.params.slug);
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json({ job });
+  } catch (err) {
+    console.error("Get job error:", err);
+    res.status(500).json({ error: "Failed to fetch job" });
+  }
+});
+
+// ── Auth endpoints ────────────────────────────────────────────────────────────
 
 app.post("/api/auth/signup", async (req, res) => {
   try {
@@ -236,6 +280,91 @@ app.put("/api/voucher/counter", async (req, res) => {
   }
 });
 
+// ── Protected careers endpoints (auth required) ───────────────────────────────
+
+app.post("/api/careers/categories", async (req, res) => {
+  try {
+    const { name, slug, order } = req.body;
+    if (!name || !slug) return res.status(400).json({ error: "name and slug are required" });
+    const cat = await createCategory({
+      name: name.trim(),
+      slug: slug.trim().toLowerCase().replace(/\s+/g, "-"),
+      order: typeof order === "number" ? order : 0,
+    });
+    res.status(201).json({ category: cat });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "Slug already exists" });
+    console.error("Create category error:", err);
+    res.status(500).json({ error: "Failed to create category" });
+  }
+});
+
+app.put("/api/careers/categories/:id", async (req, res) => {
+  try {
+    const { name, slug, order } = req.body;
+    const updates = {};
+    if (name) updates.name = name.trim();
+    if (slug) updates.slug = slug.trim().toLowerCase().replace(/\s+/g, "-");
+    if (typeof order === "number") updates.order = order;
+    const cat = await updateCategory(req.params.id, updates);
+    if (!cat) return res.status(404).json({ error: "Category not found" });
+    res.json({ category: cat });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "Slug already exists" });
+    console.error("Update category error:", err);
+    res.status(500).json({ error: "Failed to update category" });
+  }
+});
+
+app.delete("/api/careers/categories/:id", async (req, res) => {
+  try {
+    const result = await deleteCategory(req.params.id);
+    if (result.deletedCount === 0) return res.status(404).json({ error: "Category not found" });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete category error:", err);
+    res.status(500).json({ error: "Failed to delete category" });
+  }
+});
+
+app.post("/api/careers/jobs", async (req, res) => {
+  try {
+    const { title, slug } = req.body;
+    if (!title || !slug) return res.status(400).json({ error: "title and slug are required" });
+    const job = await createJob(req.body);
+    res.status(201).json({ job });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "Slug already exists" });
+    console.error("Create job error:", err);
+    res.status(500).json({ error: "Failed to create job" });
+  }
+});
+
+app.put("/api/careers/jobs/:id", async (req, res) => {
+  try {
+    const job = await updateJob(req.params.id, req.body);
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json({ job });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "Slug already exists" });
+    console.error("Update job error:", err);
+    res.status(500).json({ error: "Failed to update job" });
+  }
+});
+
+app.delete("/api/careers/jobs/:id", async (req, res) => {
+  try {
+    const result = await deleteJob(req.params.id);
+    if (result.deletedCount === 0) return res.status(404).json({ error: "Job not found" });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete job error:", err);
+    res.status(500).json({ error: "Failed to delete job" });
+  }
+});
+
+// ── Scraper ───────────────────────────────────────────────────────────────────
+
 app.post("/api/scrape", async (req, res) => {
   const { url } = req.body;
 
@@ -300,9 +429,7 @@ app.post("/api/scrape", async (req, res) => {
 });
 
 connect()
-  .then(() => {
-    return ensureAuthIndexes();
-  })
+  .then(() => Promise.all([ensureAuthIndexes(), ensureCareersIndexes()]))
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);
