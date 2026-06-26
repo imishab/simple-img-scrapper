@@ -21,7 +21,34 @@ const {
   ensureCareersIndexes,
   listCategories, createCategory, updateCategory, deleteCategory,
   listJobs, getJobBySlug, createJob, updateJob, deleteJob,
+  createApplication, listApplications, getApplicationById,
 } = require("./careers");
+const multer = require("multer");
+
+const cvStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, "jobs", "cv");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+  },
+});
+
+const cvUpload = multer({
+  storage: cvStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [".pdf", ".doc", ".docx"];
+    if (allowed.includes(path.extname(file.originalname).toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF, DOC, DOCX files are allowed"));
+    }
+  },
+});
 
 const app = express();
 const PORT = process.env.PORT || 3007;
@@ -158,6 +185,34 @@ app.get("/api/careers/jobs/:slug", async (req, res) => {
   } catch (err) {
     console.error("Get job error:", err);
     res.status(500).json({ error: "Failed to fetch job" });
+  }
+});
+
+app.post("/api/careers/apply", cvUpload.single("cv"), async (req, res) => {
+  try {
+    const { jobSlug, jobTitle, name, phone, email, location, education, experience, interviewDates, coverLetter } = req.body;
+    if (!name || !email || !phone) return res.status(400).json({ error: "Name, email, and phone are required" });
+    if (!jobSlug) return res.status(400).json({ error: "Job reference is missing" });
+
+    const application = await createApplication({
+      jobSlug,
+      jobTitle: jobTitle || jobSlug,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email.trim().toLowerCase(),
+      location: location?.trim() || "",
+      education: education?.trim() || "",
+      experience: experience?.trim() || "",
+      interviewDates: interviewDates?.trim() || "",
+      coverLetter: coverLetter?.trim() || "",
+      cvOriginalName: req.file?.originalname || null,
+      cvStoredName: req.file?.filename || null,
+    });
+
+    res.status(201).json({ success: true, id: String(application._id) });
+  } catch (err) {
+    console.error("Application submit error:", err);
+    res.status(500).json({ error: "Failed to submit application" });
   }
 });
 
@@ -360,6 +415,37 @@ app.delete("/api/careers/jobs/:id", async (req, res) => {
   } catch (err) {
     console.error("Delete job error:", err);
     res.status(500).json({ error: "Failed to delete job" });
+  }
+});
+
+// ── Protected applications endpoints ─────────────────────────────────────────
+
+app.get("/api/careers/applications", async (req, res) => {
+  try {
+    const { jobSlug } = req.query;
+    const applications = await listApplications({ jobSlug });
+    res.json({ applications });
+  } catch (err) {
+    console.error("List applications error:", err);
+    res.status(500).json({ error: "Failed to fetch applications" });
+  }
+});
+
+app.get("/api/careers/applications/:id/cv", async (req, res) => {
+  try {
+    const application = await getApplicationById(req.params.id);
+    if (!application || !application.cvStoredName) {
+      return res.status(404).json({ error: "CV not found" });
+    }
+    const cvPath = path.join(__dirname, "jobs", "cv", application.cvStoredName);
+    if (!fs.existsSync(cvPath)) {
+      return res.status(404).json({ error: "CV file missing from disk" });
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="${application.cvOriginalName || application.cvStoredName}"`);
+    res.sendFile(cvPath);
+  } catch (err) {
+    console.error("CV download error:", err);
+    res.status(500).json({ error: "Failed to download CV" });
   }
 });
 

@@ -3,6 +3,7 @@ const { ObjectId } = require('mongodb');
 
 const CATEGORIES_COL = 'job_categories';
 const JOBS_COL = 'job_posts';
+const APPLICATIONS_COL = 'job_applications';
 
 async function ensureCareersIndexes() {
   const db = getDb();
@@ -11,6 +12,8 @@ async function ensureCareersIndexes() {
     db.collection(JOBS_COL).createIndex({ slug: 1 }, { unique: true }),
     db.collection(JOBS_COL).createIndex({ categoryId: 1 }),
     db.collection(JOBS_COL).createIndex({ status: 1 }),
+    db.collection(APPLICATIONS_COL).createIndex({ jobSlug: 1 }),
+    db.collection(APPLICATIONS_COL).createIndex({ submittedAt: -1 }),
   ]);
 }
 
@@ -115,8 +118,30 @@ async function deleteJob(id) {
   return db.collection(JOBS_COL).deleteOne({ _id: toObjectId(id) });
 }
 
+// --- Applications ---
+
+async function createApplication(data) {
+  const db = getDb();
+  const doc = { ...data, submittedAt: new Date() };
+  const result = await db.collection(APPLICATIONS_COL).insertOne(doc);
+  return { ...doc, _id: result.insertedId };
+}
+
+async function listApplications({ jobSlug } = {}) {
+  const db = getDb();
+  const filter = {};
+  if (jobSlug) filter.jobSlug = jobSlug;
+  return db.collection(APPLICATIONS_COL).find(filter).sort({ submittedAt: -1 }).toArray();
+}
+
+async function getApplicationById(id) {
+  const db = getDb();
+  return db.collection(APPLICATIONS_COL).findOne({ _id: toObjectId(id) });
+}
+
 module.exports = {
   ensureCareersIndexes,
   listCategories, createCategory, updateCategory, deleteCategory,
   listJobs, getJobBySlug, getJobById, createJob, updateJob, deleteJob,
+  createApplication, listApplications, getApplicationById,
 };

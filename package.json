@@ -24,6 +24,7 @@
     "fs": "^0.0.1-security",
     "mongodb": "^7.1.0",
     "mongoose": "^9.2.4",
+    "multer": "^2.2.0",
     "path": "^0.12.7",
     "pdf-lib": "^1.17.1"
   }
