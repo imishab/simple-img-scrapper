@@ -54,7 +54,7 @@ async function sendApplicationEmail({ name, email, phone, location, education, e
 
   await mailer.sendMail({
     from: `"Pacific Group Careers" <${process.env.MAIL_USER}>`,
-    to: "hr@pacificgroup.in",
+    to: "hr@pacificgroups.in",
     subject,
     html,
   });
