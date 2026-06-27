@@ -24,6 +24,41 @@ const {
   createApplication, listApplications, getApplicationById,
 } = require("./careers");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
+
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT, 10),
+  secure: false, // STARTTLS on port 587
+  auth: {
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
+  },
+});
+
+async function sendApplicationEmail({ name, email, phone, location, education, experience, jobTitle, coverLetter, cvOriginalName }) {
+  const subject = `New Job Application – ${jobTitle}`;
+  const html = `
+    <h2>New Application for: ${jobTitle}</h2>
+    <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif">
+      <tr><td><strong>Name</strong></td><td>${name}</td></tr>
+      <tr><td><strong>Email</strong></td><td>${email}</td></tr>
+      <tr><td><strong>Phone</strong></td><td>${phone}</td></tr>
+      ${location ? `<tr><td><strong>Location</strong></td><td>${location}</td></tr>` : ""}
+      ${education ? `<tr><td><strong>Education</strong></td><td>${education}</td></tr>` : ""}
+      ${experience ? `<tr><td><strong>Experience</strong></td><td>${experience}</td></tr>` : ""}
+      ${cvOriginalName ? `<tr><td><strong>CV File</strong></td><td>${cvOriginalName}</td></tr>` : ""}
+    </table>
+    ${coverLetter ? `<h3>Cover Letter</h3><p style="white-space:pre-line">${coverLetter}</p>` : ""}
+  `;
+
+  await mailer.sendMail({
+    from: `"Pacific Group Careers" <${process.env.MAIL_USER}>`,
+    to: "hr@pacificgroup.in",
+    subject,
+    html,
+  });
+}
 
 const cvStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -210,6 +245,11 @@ app.post("/api/careers/apply", cvUpload.single("cv"), async (req, res) => {
     });
 
     res.status(201).json({ success: true, id: String(application._id) });
+
+    // Send notification email to HR (fire-and-forget; don't block the response)
+    sendApplicationEmail(application).catch((err) =>
+      console.error("Career application email error:", err)
+    );
   } catch (err) {
     console.error("Application submit error:", err);
     res.status(500).json({ error: "Failed to submit application" });
